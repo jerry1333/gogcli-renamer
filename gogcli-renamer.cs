@@ -15,6 +15,7 @@ namespace gogcli_renamer
             string renameType;
             bool dryrun = false;
             string assemblyFileName = Path.GetFileName(Assembly.GetAssembly(typeof(gogcli_renamer)).Location);
+            string version = "1.1";
 
             var manifestRegexPattern = new Regex(@".Id.: (\d+),\n.+.Slug.: .([a-z0-9_-]+).,", RegexOptions.Multiline);
 
@@ -29,17 +30,17 @@ namespace gogcli_renamer
                 else
                 {
                     Console.WriteLine("Manifest filename must be first argument and be placed in same directory.");
-                    Help(assemblyFileName);
+                    Help(assemblyFileName, version);
                     return;
                 }
 
-                if (args.Length > 1 && (args[1] == "slug" || args[1] == "full" || args[1] == "fullrev"))
+                if (args.Length > 1 && (args[1] == "slug" || args[1] == "slug-id" || args[1] == "id-slug" || args[1] == "id"))
                 {
                     renameType = args[1];
                 } else
                 {
                     Console.WriteLine("Wrong renameType argument.");
-                    Help(assemblyFileName);
+                    Help(assemblyFileName, version);
                     return;
                 }
 
@@ -50,7 +51,7 @@ namespace gogcli_renamer
             }
             else
             {
-                Help(assemblyFileName);
+                Help(assemblyFileName, version);
                 return;
             }
 
@@ -67,34 +68,63 @@ namespace gogcli_renamer
             foreach (KeyValuePair<string, string> pair in IdSlugPair)
             {
                 string newName = pair.Value;
+                string sourceDir;
+
                 switch (renameType)
                 {
                     case "slug":
                         newName = pair.Value;
                         break;
-                    case "full":
+                    case "id-slug":
                         newName = $"{pair.Key}-{pair.Value}";
                         break;
-                    case "fullrev":
+                    case "slug-id":
                         newName = $"{pair.Value}-{pair.Key}";
                         break;
+					case "id":
+						newName = $"{pair.Key}";
+						break;
                 }
-
-                Console.Write("Trying to rename '{0}' to '{1}' ... ", pair.Key, newName);
-                if (dryrun)
-                    Console.WriteLine("done (dryrun)");
+                Console.WriteLine("Working on entry '{0}'", pair.Key);
+                
+                // try all folder names 
+                if (Directory.Exists(pair.Key))
+                    // id
+                    sourceDir = pair.Key;
+                else if (Directory.Exists($"{pair.Value}"))
+                    // slug
+                    sourceDir = $"{pair.Value}";
+                else if (Directory.Exists($"{pair.Key}-{pair.Value}"))
+                    // id-slug
+                    sourceDir = $"{pair.Key}-{pair.Value}";
+                else if (Directory.Exists($"{pair.Value}-{pair.Key}"))
+                    // slug-id
+                    sourceDir = $"{pair.Value}-{pair.Key}";
                 else
                 {
-                    if (Directory.Exists(pair.Key))
+                    Console.WriteLine("  Cant find source directory for entry '{0}' '{1}'. Skipping!", pair.Key, pair.Value);
+                    Console.WriteLine("");
+                    continue;
+                }
+                Console.WriteLine("  Source directory found '{0}'", sourceDir);
+                Console.Write("  Trying rename '{0}' to '{1}' ... ", sourceDir, newName);
+
+				if (!dryrun)
+				{
+                    try
                     {
-                        Directory.Move(pair.Key, newName);
+                        Directory.Move(sourceDir, newName);
                         Console.WriteLine("done");
                     }
-                    else
+                    catch (Exception e)
                     {
-                        Console.WriteLine("source directory missing.");
+                        Console.WriteLine($"Error: {e}");
+                        Console.WriteLine("Skipping!");
+                        continue;
                     }
-                }
+				} else 
+					Console.WriteLine("done (dryrun)");
+                Console.WriteLine("");
             }
 
             Console.WriteLine("All done.");
@@ -103,18 +133,18 @@ namespace gogcli_renamer
             Console.ReadLine();
         }
 
-        private static void Help(string assemblyFileName)
+        private static void Help(string assemblyFileName, string version)
         {
-            Console.WriteLine("");
+            Console.WriteLine("{0} {1}", assemblyFileName, version);
             Console.WriteLine("Usage:");
             Console.WriteLine("    {0} fileName.json renameType dryrun", assemblyFileName);
             Console.WriteLine("Where: ");
             Console.WriteLine("    FileName.json enter manifest.json file name (in current directory)");
-            Console.WriteLine("    renameType change rename type possible values: 'slug', 'full', 'fullrev'");
-
-            Console.WriteLine("        'slug'   = just slug eg. 'fallout_tactics'");
-            Console.WriteLine("        'full'   = ID-SLUG   eg. '3-fallout_tactics'");
-            Console.WriteLine("        'fullrev = SLUG-ID   eg. 'fallout_tactics-3'");
+            Console.WriteLine("    renameType change rename type possible values: 'slug', 'id-slug', 'slug-id', 'id'");
+            Console.WriteLine("        'slug'    = just slug eg. 'fallout_tactics'");
+            Console.WriteLine("        'id-slug' = ID-SLUG   eg. '3-fallout_tactics'");
+            Console.WriteLine("        'slug-id' = SLUG-ID   eg. 'fallout_tactics-3'");
+			Console.WriteLine("        'id'      = just ID   eg. '3'");
             Console.WriteLine("    dryrun for dry run (no rename occurs) type 'dryrun' as last argument (optional)");
             Console.WriteLine("");
             Console.WriteLine("eg. {0} manifest.json slug", assemblyFileName);
